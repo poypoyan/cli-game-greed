@@ -30,12 +30,6 @@ class GameState:
     score: int = 0
 
 
-@dataclass
-class GameMoves:
-    allowed: list   # of chars
-    hilight: dict   # of list of tuple (coord)
-
-
 DIRS = np.array([(-1, -1), (-1, 0), (-1, 1),
     (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)])
 
@@ -51,7 +45,7 @@ def init(h: int, w: int) -> GameState:
     return GameState(h, w, h * w, arr, curr)
 
 
-def disp(gs: GameState, gm: GameMoves, palette: list, cls: str) -> None:
+def disp(gs: GameState, hl: dict, palette: list, cls: str) -> None:
     line = ''
     for i in range(gs.HEIGHT):
         for j in range(gs.WIDTH):
@@ -59,7 +53,7 @@ def disp(gs: GameState, gm: GameMoves, palette: list, cls: str) -> None:
                 line += '@'
             elif gs.arr[i, j] == 0:
                 line += ' '
-            elif is_in_hilight(gm, (i, j)):
+            elif is_in_highlight(hl, (i, j)):
                 line += f'{ansi_color(palette[0])}{gs.arr[i, j]}{ansi_color(0)}'
             else:
                 line += f'{ansi_color(palette[gs.arr[i, j]])}{gs.arr[i, j]}{ansi_color(0)}'
@@ -68,9 +62,9 @@ def disp(gs: GameState, gm: GameMoves, palette: list, cls: str) -> None:
     print(f'{line}{ansi_color(0)}')
 
 
-def is_in_hilight(gm: GameMoves, coord: tuple) -> bool:
-    for i in gm.hilight:
-        if coord in gm.hilight[i]:
+def is_in_highlight(hl: dict, coord: tuple) -> bool:
+    for i in hl:
+        if coord in hl[i]:
             return True
     else:
         return False
@@ -80,9 +74,8 @@ def ansi_color(code):
     return f'\u001b[{code}m'
 
 
-def get_moves(gs: GameState) -> GameMoves:
-    allowed = []
-    hilight = {}
+def get_moves(gs: GameState) -> dict:
+    highlight = {}
     for i in range(len(DIRS)):
         check_coord = (gs.curr[0] + DIRS[i][0], gs.curr[1] + DIRS[i][1])
         if not is_in_grid(gs, check_coord):
@@ -97,17 +90,16 @@ def get_moves(gs: GameState) -> GameMoves:
             check_coord = (check_coord[0] + DIRS[i][0], check_coord[1] + DIRS[i][1])
         else:
             if num_beside > 0:
-                allowed.append(i)
-                hilight[i] = dir_cells
-    return GameMoves(allowed, hilight)
+                highlight[i] = dir_cells
+    return highlight
 
 
 def is_in_grid(gs: GameState, coord: tuple) -> bool:
     return 0 <= coord[0] and coord[0] < gs.HEIGHT and 0 <= coord[1] and coord[1] < gs.WIDTH
 
 
-def update(gs: GameState, gm: GameMoves, upd_dir: int) -> None:
-    clear_coords = gm.hilight[upd_dir]
+def update(gs: GameState, hl: dict, upd_dir: int) -> None:
+    clear_coords = hl[upd_dir]
     for i in clear_coords:
         gs.arr[i] = 0
     gs.curr[0] = clear_coords[0][0]
@@ -135,10 +127,10 @@ if __name__ == '__main__':
     gs = init(HEIGHT, WIDTH)
 
     while True:
-        gm = get_moves(gs)
-        disp(gs, gm, PALETTE, CLEAR_SCREEN)
+        hl = get_moves(gs)
+        disp(gs, hl, PALETTE, CLEAR_SCREEN)
         print(f'Score: {gs.score}   Percentage: {percentage(gs)}', end=' ', flush=True)
-        if len(gm.allowed) == 0:
+        if len(hl) == 0:
             print('   Game over! Press any key to quit.', end=' ', flush=True)
             readchar.readkey()
             break
@@ -151,7 +143,7 @@ if __name__ == '__main__':
                 continue
 
             chosen_dir = CONTROL.index(key)
-            if chosen_dir in gm.allowed:
+            if chosen_dir in hl:
                break
-        update(gs, gm, chosen_dir)
+        update(gs, hl, chosen_dir)
     exit_game()
