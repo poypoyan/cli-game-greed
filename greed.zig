@@ -20,9 +20,9 @@ const c_stdlib = @cImport({@cInclude("stdlib.h");});
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
 
-// Get a character (Getch). This only works on Linux.
+// Get a character (getch). This only works for Linux.
 // Source: https://www.reddit.com/r/Zig/comments/j77jgs/comment/g83cm4c/
-// TODO: simple Zig package for getch (atleast Linux and Windows)
+// TODO: simple Zig package for getch (at least for Linux and Windows)
 fn getch() !u8 {
     const c = @cImport({
         @cInclude("termios.h");
