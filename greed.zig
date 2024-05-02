@@ -16,7 +16,9 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const c_stdlib = @cImport({@cInclude("stdlib.h");});
+const c_stdlib = @cImport({
+    @cInclude("stdlib.h");
+});
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
 
@@ -47,24 +49,20 @@ fn getch() !u8 {
 }
 
 fn GameState(comptime h: u8, comptime w: u8) type {
-    return struct {
-        arr: [h][w]u8,
-        score: u64,
-        curr: [2]u8
-    };
+    return struct { arr: [h][w]u8, score: u64, curr: [2]u8 };
 }
 
 const Highlight = std.AutoArrayHashMap(u8, std.BoundedArray([2]u8, 9));
 
 const dirs = [_][2]i8{
     [2]i8{ -1, -1 },
-    [2]i8{ -1,  0 },
-    [2]i8{ -1,  1 },
-    [2]i8{  0, -1 },
-    [2]i8{  0,  1 },
-    [2]i8{  1, -1 },
-    [2]i8{  1,  0 },
-    [2]i8{  1,  1 },
+    [2]i8{ -1, 0 },
+    [2]i8{ -1, 1 },
+    [2]i8{ 0, -1 },
+    [2]i8{ 0, 1 },
+    [2]i8{ 1, -1 },
+    [2]i8{ 1, 0 },
+    [2]i8{ 1, 1 },
 };
 
 fn percentage(h: u8, w: u8, score: u64) f64 {
@@ -73,7 +71,7 @@ fn percentage(h: u8, w: u8, score: u64) f64 {
 
 fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
     var rand_impl = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
-    const curr = [2]u8{rand_impl.random().int(u8) % h, rand_impl.random().int(u8) % w};
+    const curr = [2]u8{ rand_impl.random().int(u8) % h, rand_impl.random().int(u8) % w };
     var arr: [h][w]u8 = undefined;
     for (&arr) |*row| {
         for (row) |*cell| {
@@ -81,15 +79,14 @@ fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
         }
     }
     arr[curr[0]][curr[1]] = 0;
-    return GameState(h, w) {
+    return GameState(h, w){
         .arr = arr,
         .score = 0,
         .curr = curr,
     };
 }
 
-fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight,
-        palette: [10][:0]const u8, cls: [:0]const u8) !void {
+fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8, cls: [:0]const u8) !void {
     var line = try allocator.alloc(u8, @as(u64, 23) * h * w);
     defer allocator.free(line);
     var track_len: u64 = 0;
@@ -114,7 +111,7 @@ fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameS
     }
 
     _ = c_stdlib.system(cls);
-    try stdout.print("{s}\n", .{ line[0..track_len] });
+    try stdout.print("{s}\n", .{line[0..track_len]});
 }
 
 fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
@@ -143,7 +140,7 @@ fn get_moves(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highligh
         var dir_cells: std.BoundedArray([2]u8, 9) = .{};
         const num_beside = gs.arr[adj_coord[0]][adj_coord[1]];
 
-        for(0..num_beside) |_| {
+        for (0..num_beside) |_| {
             if (!is_in_grid(h, w, check_coord)) break;
             try coord_to_u8(check_coord, &adj_coord);
             if (gs.arr[adj_coord[0]][adj_coord[1]] == 0) break;
@@ -182,19 +179,15 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const clear_screen =
-        if (builtin.os.tag == .windows)
-            "cls"
-        else
-            "clear";
+    const clear_screen = if (builtin.os.tag == .windows) "cls" else "clear";
 
     const h = 22;
     const w = 79;
-    const palette = [_][:0]const u8{"90;47", "33", "31", "32", "34", "35", "93", "91", "92", "96"};
-    const control  = [_]u8{'q', 'w', 'e', 'a', 'd', 'z', 'x', 'c'};
+    const palette = [_][:0]const u8{ "90;47", "33", "31", "32", "34", "35", "93", "91", "92", "96" };
+    const control = [_]u8{ 'q', 'w', 'e', 'a', 'd', 'z', 'x', 'c' };
     const quitkey = ' ';
 
-    var gs = init(h, w);   // width and height must be known in comptime
+    var gs = init(h, w); // width and height must be known in comptime
 
     while (true) {
         var hl = Highlight.init(allocator);
@@ -222,14 +215,16 @@ pub fn main() !void {
 
             for (0..control.len, control) |i, j| {
                 if (j == key) {
-                    chosen_dir = @as(u8, @truncate(i)); break;
+                    chosen_dir = @as(u8, @truncate(i));
+                    break;
                 }
             } else continue;
 
             var valid = false;
             for (hl.keys()) |i| {
                 if (i == chosen_dir) {
-                    valid = true; break;
+                    valid = true;
+                    break;
                 }
             }
             if (valid) break;
