@@ -19,17 +19,15 @@ const builtin = @import("builtin");
 const c_stdlib = @cImport({
     @cInclude("stdlib.h");
 });
-const stdin = std.io.getStdIn().reader();
-const stdout = std.io.getStdOut().writer();
 
-// Get a character (getch). This only works for Linux.
-// Source: https://www.reddit.com/r/Zig/comments/j77jgs/comment/g83cm4c/
+// Get a keypress. This works for Linux.
+// Source: https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
 // TODO: simple Zig package for getch (at least for Linux and Windows)
 fn getch() !u8 {
+    const stdin = std.io.getStdIn().reader();
     const c = @cImport({
         @cInclude("termios.h");
         @cInclude("unistd.h");
-        @cInclude("stdlib.h");
     });
 
     // save current mode
@@ -37,8 +35,8 @@ fn getch() !u8 {
     _ = c.tcgetattr(c.STDIN_FILENO, &orig_termios);
 
     // set new "raw" mode
-    var raw: c.termios = undefined;
-    raw.c_lflag &= ~(@as(u8, c.ECHO) | @as(u8, c.ICANON));
+    var raw = orig_termios;
+    raw.c_lflag &= @bitCast(~(c.ECHO | c.ICANON | c.ISIG));
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 
     const char = try stdin.readByte();
@@ -46,6 +44,16 @@ fn getch() !u8 {
     // restore old mode
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios);
     return char;
+}
+
+// Get a keypress. This works for Windows.
+fn getch_win() !u8 {
+    const c = @cImport({
+        @cInclude("conio.h");
+    });
+
+    const char = c.getch();
+    return @as(u8, @truncate(@as(u32, @bitCast(char))));
 }
 
 fn GameState(comptime h: u8, comptime w: u8) type {
@@ -87,6 +95,8 @@ fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
 }
 
 fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8, cls: [:0]const u8) !void {
+    const stdout = std.io.getStdOut().writer();
+
     var line = try allocator.alloc(u8, @as(u64, 23) * h * w);
     defer allocator.free(line);
     var track_len: u64 = 0;
@@ -175,11 +185,14 @@ fn update(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, u
 }
 
 pub fn main() !void {
+    const stdout = std.io.getStdOut().writer();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const clear_screen = if (builtin.os.tag == .windows) "cls" else "clear";
+    const getch_fn = if (builtin.os.tag == .windows) getch_win else getch;
 
     const h = 22;
     const w = 79;
@@ -200,14 +213,14 @@ pub fn main() !void {
 
         if (hl.count() == 0) {
             try stdout.print("   Game over! Press any key to quit.", .{});
-            _ = try getch();
+            _ = try getch_fn();
             try stdout.print("\n", .{});
             return;
         }
 
         var chosen_dir: u8 = undefined;
         while (true) {
-            const key = try getch();
+            const key = try getch_fn();
             if (key == quitkey) {
                 try stdout.print("\n", .{});
                 return;

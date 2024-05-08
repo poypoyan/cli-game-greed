@@ -12,14 +12,13 @@ z x c
 However, this is editable through `CONTROL` variable. Also, press &lt;space&gt; to quit, but this is also editable through `QUITKEY` variable.
 
 ### Python
-At least Python 3.6 is required because of **f-strings**. Required third-party libraries for Python are **numpy** (for multidimensional array) and **readchar** (for getch/get keypress). To install:
+At least Python 3.6 is required because of **f-strings**. Required third-party libraries for Python are **numpy** (for multidimensional array) and **readchar** (for getch/get a keypress). Note that as of writing, readchar only works for Linux and Windows. To install:
 ```console
 pip install numpy readchar
 ```
-Note that as of writing, readchar only works for Linux and Windows.
 
 ### Zig
-Zig 0.12 is required. Only works for Linux because there is still no cross-platform getch package for Zig (this is a TODO). To compile:
+Zig 0.12 is required. Works for Linux and Windows, although a cross-platform getch package for Zig is still a TODO. To compile:
 ```console
 zig build-exe -lc greed.zig
 ```
