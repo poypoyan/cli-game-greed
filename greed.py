@@ -139,10 +139,10 @@ if __name__ == '__main__':
             key = readchar.readkey()
             if key == QUITKEY:
                 exit_game()
-            if not key in CONTROL:
+            try:
+                chosen_dir = CONTROL.index(key)
+            except ValueError:
                 continue
-
-            chosen_dir = CONTROL.index(key)
             if chosen_dir in hl:
                break
         update(gs, hl, chosen_dir)
