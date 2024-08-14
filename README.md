@@ -12,9 +12,9 @@ z x c
 However, this is editable through `CONTROL` variable. Also, press &lt;space&gt; to quit, but this is also editable through `QUITKEY` variable.
 
 ### Python
-At least Python 3.6 is required because of **f-strings**. Required third-party libraries for Python are **numpy** (for multidimensional array) and **readchar** (for getch/get a keypress). Note that as of writing, readchar only works for Linux and Windows. To install:
+At least Python 3.6 is required because of **f-strings**. Required third-party library is **readchar** (for getch/get a keypress). Note that as of writing, readchar only works for Linux and Windows. To install:
 ```console
-pip install numpy readchar
+pip install readchar
 ```
 
 ### Zig

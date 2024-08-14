@@ -16,8 +16,8 @@
 
 from dataclasses import dataclass
 import os
-import numpy as np
 import readchar
+import random
 
 
 @dataclass
@@ -25,13 +25,13 @@ class GameState:
     HEIGHT: int
     WIDTH: int
     CELLS: int
-    arr: np.ndarray
-    curr: np.ndarray
+    arr: list
+    curr: list
     score: int = 0
 
 
-DIRS = np.array([(-1, -1), (-1, 0), (-1, 1),
-    (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)])
+DIRS = [(-1, -1), (-1, 0), (-1, 1),
+    (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
 def percentage(gs: GameState) -> str:
@@ -39,9 +39,11 @@ def percentage(gs: GameState) -> str:
 
 
 def init(h: int, w: int) -> GameState:
-    curr = np.random.randint(0, (h, w))   # current location (the '@')
-    arr = np.random.randint(1, high=10, size=(h, w))
-    arr[curr[0], curr[1]] = 0
+    curr = [random.randrange(h), random.randrange(w)]
+    arr = []
+    for _ in range(h):
+        arr.append([random.randrange(1, 10) for _ in range(w)])
+    arr[curr[0]][curr[1]] = 0
     return GameState(h, w, h * w, arr, curr)
 
 
@@ -51,12 +53,12 @@ def disp(gs: GameState, hl: dict, palette: list, cls: str) -> None:
         for j in range(gs.WIDTH):
             if i == gs.curr[0] and j == gs.curr[1]:
                 line += '@'
-            elif gs.arr[i, j] == 0:
+            elif gs.arr[i][j] == 0:
                 line += ' '
             elif is_in_highlight(hl, (i, j)):
-                line += f'{ansi_color(palette[0])}{gs.arr[i, j]}{ansi_color(0)}'
+                line += f'{ansi_color(palette[0])}{gs.arr[i][j]}{ansi_color(0)}'
             else:
-                line += f'{ansi_color(palette[gs.arr[i, j]])}{gs.arr[i, j]}{ansi_color(0)}'
+                line += f'{ansi_color(palette[gs.arr[i][j]])}{gs.arr[i][j]}{ansi_color(0)}'
         line += '\n'
     os.system(cls)
     print(f'{line}{ansi_color(0)}')
@@ -81,10 +83,10 @@ def get_moves(gs: GameState) -> dict:
         if not is_in_grid(gs, check_coord):
             continue
         dir_cells = []
-        num_beside = gs.arr[check_coord[0], check_coord[1]]
+        num_beside = gs.arr[check_coord[0]][check_coord[1]]
 
         for j in range(num_beside):
-            if not is_in_grid(gs, check_coord) or gs.arr[check_coord[0], check_coord[1]] == 0:
+            if not is_in_grid(gs, check_coord) or gs.arr[check_coord[0]][check_coord[1]] == 0:
                 break
             dir_cells.insert(0, check_coord)
             check_coord = (check_coord[0] + DIRS[i][0], check_coord[1] + DIRS[i][1])
@@ -101,7 +103,7 @@ def is_in_grid(gs: GameState, coord: tuple) -> bool:
 def update(gs: GameState, hl: dict, upd_dir: int) -> None:
     clear_coords = hl[upd_dir]
     for i in clear_coords:
-        gs.arr[i] = 0
+        gs.arr[i[0]][i[1]] = 0
     gs.curr[0] = clear_coords[0][0]
     gs.curr[1] = clear_coords[0][1]
     gs.score += len(clear_coords)
