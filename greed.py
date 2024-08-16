@@ -1,5 +1,5 @@
 # Greed game in Python
-# Note: uses 3rd-party libraries numpy and readchar
+# Note: uses 3rd-party library readchar
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -12,7 +12,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>. 
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from dataclasses import dataclass
 import os
@@ -114,7 +114,7 @@ def exit_game() -> None:
     exit()
 
 
-if __name__ == '__main__':
+def main() -> None:
     HEIGHT = 22
     WIDTH = 79
     PALETTE = ['90;47', '33', '31', '32', '34', '35', '93', '91', '92', '96']
@@ -149,3 +149,7 @@ if __name__ == '__main__':
                break
         update(gs, hl, chosen_dir)
     exit_game()
+
+
+if __name__ == '__main__':
+    main()
