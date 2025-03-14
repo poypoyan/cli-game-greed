@@ -78,7 +78,7 @@ fn percentage(h: u8, w: u8, score: u64) f64 {
 }
 
 fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
-    var rand_impl = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
+    var rand_impl = std.Random.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
     const curr = [2]u8{ rand_impl.random().int(u8) % h, rand_impl.random().int(u8) % w };
     var arr: [h][w]u8 = undefined;
     for (&arr) |*row| {
