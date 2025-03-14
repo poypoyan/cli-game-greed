@@ -22,7 +22,6 @@ const c_stdlib = @cImport({
 
 // Get a keypress. This works for Linux.
 // Source: https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
-// TODO: simple Zig package for getch (at least for Linux and Windows)
 fn getch() !u8 {
     const stdin = std.io.getStdIn().reader();
     const c = @cImport({
