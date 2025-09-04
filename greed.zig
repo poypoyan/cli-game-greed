@@ -23,7 +23,10 @@ const c_stdlib = @cImport({
 // Get a keypress. This works for Linux.
 // Source: https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
 fn getch() !u8 {
-    const stdin = std.io.getStdIn().reader();
+    var stdin_buffer: [1]u8 = undefined;
+    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    const stdin = &stdin_reader.interface;
+
     const c = @cImport({
         @cInclude("termios.h");
         @cInclude("unistd.h");
@@ -38,7 +41,7 @@ fn getch() !u8 {
     raw.c_lflag &= @bitCast(~(c.ECHO | c.ICANON | c.ISIG));
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 
-    const char = try stdin.readByte();
+    const char = stdin.takeByte();
 
     // restore old mode
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios);
@@ -59,7 +62,7 @@ fn GameState(comptime h: u8, comptime w: u8) type {
     return struct { arr: [h][w]u8, score: u64, curr: [2]u8 };
 }
 
-const Highlight = std.AutoArrayHashMap(u8, std.BoundedArray([2]u8, 9));
+const Highlight = std.AutoArrayHashMap(u8, struct { coords: [9][2]u8, coords_len: usize = 0 });
 
 const dirs = [_][2]i8{
     [2]i8{ -1, -1 },
@@ -94,44 +97,48 @@ fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
 }
 
 fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8, cls: [:0]const u8) !void {
-    const stdout = std.io.getStdOut().writer();
+    const buffer_len = @as(usize, 15) * h * w; // the allocPrint's below should be at most 15 characters
+    var line: [buffer_len]u8 = undefined;
 
-    var line = try allocator.alloc(u8, @as(u64, 23) * h * w);
-    defer allocator.free(line);
+    var stdout_buffer: [buffer_len]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
     var track_len: u64 = 0;
 
     for (0..h) |i| {
         for (0..w) |j| {
             if (i == gs.curr[0] and j == gs.curr[1]) {
-                try place_in_str(&line, "@", &track_len);
+                try place_in_str(buffer_len, &line, "@", &track_len);
             } else if (gs.arr[i][j] == 0) {
-                try place_in_str(&line, " ", &track_len);
+                try place_in_str(buffer_len, &line, " ", &track_len);
             } else if (is_in_highlight(hl, [2]u8{ @as(u8, @truncate(i)), @as(u8, @truncate(j)) })) {
-                const digit = try std.fmt.allocPrintZ(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[0], gs.arr[i][j] });
+                const digit = try std.fmt.allocPrint(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[0], gs.arr[i][j] });
                 defer allocator.free(digit);
-                try place_in_str(&line, digit, &track_len);
+                try place_in_str(buffer_len, &line, digit, &track_len);
             } else {
-                const digit = try std.fmt.allocPrintZ(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[gs.arr[i][j]], gs.arr[i][j] });
+                const digit = try std.fmt.allocPrint(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[gs.arr[i][j]], gs.arr[i][j] });
                 defer allocator.free(digit);
-                try place_in_str(&line, digit, &track_len);
+                try place_in_str(buffer_len, &line, digit, &track_len);
             }
         }
-        try place_in_str(&line, "\n", &track_len);
+        try place_in_str(buffer_len, &line, "\n", &track_len);
     }
 
     _ = c_stdlib.system(cls);
     try stdout.print("{s}\n", .{line[0..track_len]});
+    try stdout.flush();
 }
 
 fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
     for (hl.keys()) |i| {
-        for (hl.get(i).?.slice()) |j| {
-            if (std.mem.eql(u8, &coord, &j)) return true;
+        for (0..hl.get(i).?.coords_len) |j| {
+            if (std.mem.eql(u8, &coord, &hl.get(i).?.coords[j])) return true;
         }
     } else return false;
 }
 
-fn place_in_str(str: *[]u8, input: [:0]const u8, curr_len: *u64) !void {
+fn place_in_str(comptime arr_len: usize, str: *[arr_len]u8, input: []const u8, curr_len: *u64) !void {
     for (0..input.len) |i| {
         str.*[curr_len.* + i] = input[i];
     }
@@ -146,18 +153,19 @@ fn get_moves(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highligh
         if (!is_in_grid(h, w, check_coord)) continue;
         try coord_to_u8(check_coord, &adj_coord);
 
-        var dir_cells: std.BoundedArray([2]u8, 9) = .{};
+        var dir_coords: [9][2]u8 = undefined;
+        var dir_len: usize = 0;
         const num_beside = gs.arr[adj_coord[0]][adj_coord[1]];
 
         for (0..num_beside) |_| {
             if (!is_in_grid(h, w, check_coord)) break;
             try coord_to_u8(check_coord, &adj_coord);
             if (gs.arr[adj_coord[0]][adj_coord[1]] == 0) break;
-            try dir_cells.insert(0, adj_coord);
+            dir_coords[dir_len] = adj_coord;
+            dir_len += 1;
             try add_coords_to_i8(adj_coord, dirs[i], &check_coord);
-        } else {
-            if (num_beside > 0) try hl.put(@as(u8, @truncate(i)), dir_cells);
-        }
+        } else if (num_beside > 0)
+            try hl.put(@as(u8, @truncate(i)), .{ .coords = dir_coords, .coords_len = dir_len });
     }
 }
 
@@ -176,15 +184,17 @@ fn is_in_grid(h: u8, w: u8, coord: [2]i8) bool {
 }
 
 fn update(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, upd_dir: u8) void {
-    const clear_coords = hl.get(upd_dir).?.slice();
+    const clear_coords = hl.get(upd_dir).?.coords[0..hl.get(upd_dir).?.coords_len];
     for (clear_coords) |i| gs.arr[i[0]][i[1]] = 0;
-    gs.curr[0] = clear_coords[0][0];
-    gs.curr[1] = clear_coords[0][1];
+    gs.curr[0] = clear_coords[clear_coords.len - 1][0];
+    gs.curr[1] = clear_coords[clear_coords.len - 1][1];
     gs.score += clear_coords.len;
 }
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [64]u8 = undefined; // the prints below should be at most 64 characters
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -209,11 +219,14 @@ pub fn main() !void {
         try disp(allocator, h, w, &gs, hl, palette, clear_screen);
 
         try stdout.print("Score: {d}   Percentage: {d:.2} ", .{ gs.score, percentage(h, w, gs.score) });
+        try stdout.flush();
 
         if (hl.count() == 0) {
             try stdout.print("   Game over! Press any key to quit.", .{});
+            try stdout.flush();
             _ = try getch_fn();
             try stdout.print("\n", .{});
+            try stdout.flush();
             return;
         }
 
@@ -222,6 +235,7 @@ pub fn main() !void {
             const key = try getch_fn();
             if (key == quitkey) {
                 try stdout.print("\n", .{});
+                try stdout.flush();
                 return;
             }
 
@@ -244,3 +258,4 @@ pub fn main() !void {
         update(h, w, &gs, hl, chosen_dir);
     }
 }
+
