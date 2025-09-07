@@ -96,38 +96,21 @@ fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
     };
 }
 
-fn disp(allocator: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8, cls: [:0]const u8) !void {
-    const buffer_len = @as(usize, 15) * h * w; // the allocPrint's below should be at most 15 characters
-    var line: [buffer_len]u8 = undefined;
-
-    var stdout_buffer: [buffer_len]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    var track_len: u64 = 0;
-
+fn disp(stdout: *std.Io.Writer, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8) !void {
     for (0..h) |i| {
         for (0..w) |j| {
             if (i == gs.curr[0] and j == gs.curr[1]) {
-                try place_in_str(buffer_len, &line, "@", &track_len);
+                try stdout.print("@", .{});
             } else if (gs.arr[i][j] == 0) {
-                try place_in_str(buffer_len, &line, " ", &track_len);
+                try stdout.print(" ", .{});
             } else if (is_in_highlight(hl, [2]u8{ @as(u8, @truncate(i)), @as(u8, @truncate(j)) })) {
-                const digit = try std.fmt.allocPrint(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[0], gs.arr[i][j] });
-                defer allocator.free(digit);
-                try place_in_str(buffer_len, &line, digit, &track_len);
+                try stdout.print("\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[0], gs.arr[i][j] });
             } else {
-                const digit = try std.fmt.allocPrint(allocator, "\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[gs.arr[i][j]], gs.arr[i][j] });
-                defer allocator.free(digit);
-                try place_in_str(buffer_len, &line, digit, &track_len);
+                try stdout.print("\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[gs.arr[i][j]], gs.arr[i][j] });
             }
         }
-        try place_in_str(buffer_len, &line, "\n", &track_len);
+        try stdout.print("\n", .{});
     }
-
-    _ = c_stdlib.system(cls);
-    try stdout.print("{s}\n", .{line[0..track_len]});
-    try stdout.flush();
 }
 
 fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
@@ -136,13 +119,6 @@ fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
             if (std.mem.eql(u8, &coord, &hl.get(i).?.coords[j])) return true;
         }
     } else return false;
-}
-
-fn place_in_str(comptime arr_len: usize, str: *[arr_len]u8, input: []const u8, curr_len: *u64) !void {
-    for (0..input.len) |i| {
-        str.*[curr_len.* + i] = input[i];
-    }
-    curr_len.* += input.len;
 }
 
 fn get_moves(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highlight) !void {
@@ -192,7 +168,10 @@ fn update(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, u
 }
 
 pub fn main() !void {
-    var stdout_buffer: [64]u8 = undefined; // the prints below should be at most 64 characters
+    const h = 22;
+    const w = 79;
+
+    var stdout_buffer: [15 * h * w]u8 = undefined; // should be enough to display the number table + score
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
@@ -203,8 +182,6 @@ pub fn main() !void {
     const clear_screen = if (builtin.os.tag == .windows) "cls" else "clear";
     const getch_fn = if (builtin.os.tag == .windows) getch_win else getch;
 
-    const h = 22;
-    const w = 79;
     const palette = [_][:0]const u8{ "90;47", "33", "31", "32", "34", "35", "93", "91", "92", "96" };
     const control = [_]u8{ 'q', 'w', 'e', 'a', 'd', 'z', 'x', 'c' };
     const quitkey = ' ';
@@ -216,9 +193,10 @@ pub fn main() !void {
         defer hl.deinit();
 
         try get_moves(h, w, &gs, &hl);
-        try disp(allocator, h, w, &gs, hl, palette, clear_screen);
+        try disp(stdout, h, w, &gs, hl, palette);
 
         try stdout.print("Score: {d}   Percentage: {d:.2} ", .{ gs.score, percentage(h, w, gs.score) });
+        _ = c_stdlib.system(clear_screen);
         try stdout.flush();
 
         if (hl.count() == 0) {
@@ -258,4 +236,3 @@ pub fn main() !void {
         update(h, w, &gs, hl, chosen_dir);
     }
 }
-
