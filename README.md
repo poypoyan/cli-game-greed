@@ -18,10 +18,11 @@ pip install readchar
 ```
 
 ### Zig
-Zig 0.15.1 is required. Works for Linux and Windows. To compile:
+This is updated every new Zig version (and if I have free time). As of latest commit, Zig 0.16.0 is required. Works for Linux and Windows. To compile:
 ```console
-zig build-exe -lc greed.zig
+zig build
 ```
+The executable is in `zig-out/bin`.
 
 ## License
 GPLv3 FTW!

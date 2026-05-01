@@ -16,21 +16,16 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const c_stdlib = @cImport({
-    @cInclude("stdlib.h");
-});
+const c_stdlib = @import("stdlib_c");
 
 // Get a keypress. This works for Linux.
 // Source: https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
-fn getch() !u8 {
+fn getch(io: std.Io) !u8 {
     var stdin_buffer: [1]u8 = undefined;
-    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
 
-    const c = @cImport({
-        @cInclude("termios.h");
-        @cInclude("unistd.h");
-    });
+    const c = @import("getch_c");
 
     // save current mode
     var orig_termios: c.termios = undefined;
@@ -49,10 +44,9 @@ fn getch() !u8 {
 }
 
 // Get a keypress. This works for Windows.
-fn getch_win() !u8 {
-    const c = @cImport({
-        @cInclude("conio.h");
-    });
+fn getch_win(io: std.Io) !u8 {
+    _ = io;
+    const c = @import("getch_c");
 
     const char = c.getch();
     return @as(u8, @truncate(@as(u32, @bitCast(char))));
@@ -62,7 +56,7 @@ fn GameState(comptime h: u8, comptime w: u8) type {
     return struct { arr: [h][w]u8, score: u64, curr: [2]u8 };
 }
 
-const Highlight = std.AutoArrayHashMap(u8, struct { coords: [9][2]u8, coords_len: usize = 0 });
+const Highlight = std.array_hash_map.Auto(u8, struct { coords: [9][2]u8, coords_len: usize = 0 });
 
 const dirs = [_][2]i8{
     [2]i8{ -1, -1 },
@@ -79,8 +73,8 @@ fn percentage(h: u8, w: u8, score: u64) f64 {
     return @as(f64, @floatFromInt(score * 100)) / (@as(f64, @floatFromInt(h)) * @as(f64, @floatFromInt(w)));
 }
 
-fn init(comptime h: u8, comptime w: u8) GameState(h, w) {
-    var rand_impl = std.Random.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp())));
+fn game_init(io: std.Io, comptime h: u8, comptime w: u8) GameState(h, w) {
+    var rand_impl = std.Random.DefaultPrng.init(@as(u64, @bitCast(std.Io.Clock.now(.real, io).toMilliseconds())));
     const curr = [2]u8{ rand_impl.random().int(u8) % h, rand_impl.random().int(u8) % w };
     var arr: [h][w]u8 = undefined;
     for (&arr) |*row| {
@@ -121,7 +115,7 @@ fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
     } else return false;
 }
 
-fn get_moves(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highlight) !void {
+fn get_moves(gpa: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highlight) !void {
     for (0..dirs.len) |i| {
         var check_coord: [2]i8 = undefined;
         var adj_coord: [2]u8 = undefined;
@@ -141,7 +135,7 @@ fn get_moves(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highligh
             dir_len += 1;
             try add_coords_to_i8(adj_coord, dirs[i], &check_coord);
         } else if (num_beside > 0)
-            try hl.put(@as(u8, @truncate(i)), .{ .coords = dir_coords, .coords_len = dir_len });
+            try hl.put(gpa, @as(u8, @truncate(i)), .{ .coords = dir_coords, .coords_len = dir_len });
     }
 }
 
@@ -167,32 +161,32 @@ fn update(comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, u
     gs.score += clear_coords.len;
 }
 
-pub fn main() !void {
+const clear_screen = if (builtin.os.tag == .windows) "cls" else "clear";
+const getch_fn = if (builtin.os.tag == .windows) getch_win else getch;
+
+pub fn main(init: std.process.Init) !void {
     const h = 22;
     const w = 79;
 
     var stdout_buffer: [15 * h * w]u8 = undefined; // should be enough to display the number table + score
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+
+    const io = init.io;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const clear_screen = if (builtin.os.tag == .windows) "cls" else "clear";
-    const getch_fn = if (builtin.os.tag == .windows) getch_win else getch;
+    const gpa = init.gpa;
 
     const palette = [_][:0]const u8{ "90;47", "33", "31", "32", "34", "35", "93", "91", "92", "96" };
     const control = [_]u8{ 'q', 'w', 'e', 'a', 'd', 'z', 'x', 'c' };
     const quitkey = ' ';
 
-    var gs = init(h, w); // width and height must be known in comptime
+    var gs = game_init(io, h, w); // width and height must be known in comptime
 
     while (true) {
-        var hl = Highlight.init(allocator);
-        defer hl.deinit();
+        var hl = Highlight.empty;
+        defer hl.deinit(gpa);
 
-        try get_moves(h, w, &gs, &hl);
+        try get_moves(gpa, h, w, &gs, &hl);
         try disp(stdout, h, w, &gs, hl, palette);
 
         try stdout.print("Score: {d}   Percentage: {d:.2} ", .{ gs.score, percentage(h, w, gs.score) });
@@ -202,7 +196,7 @@ pub fn main() !void {
         if (hl.count() == 0) {
             try stdout.print("   Game over! Press any key to quit.", .{});
             try stdout.flush();
-            _ = try getch_fn();
+            _ = try getch_fn(io);
             try stdout.print("\n", .{});
             try stdout.flush();
             return;
@@ -210,7 +204,7 @@ pub fn main() !void {
 
         var chosen_dir: u8 = undefined;
         while (true) {
-            const key = try getch_fn();
+            const key = try getch_fn(io);
             if (key == quitkey) {
                 try stdout.print("\n", .{});
                 try stdout.flush();
