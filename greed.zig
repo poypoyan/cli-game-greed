@@ -1,5 +1,5 @@
 // Greed game in Zig
-// Note: compile with zig build-exe -lc
+// Note: compile with zig build
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
@@ -90,15 +90,11 @@ fn game_init(io: std.Io, comptime h: u8, comptime w: u8) GameState(h, w) {
     };
 }
 
-fn disp(stdout: *std.Io.Writer, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: Highlight, palette: [10][:0]const u8) !void {
+fn disp_init(stdout: *std.Io.Writer, comptime h: u8, comptime w: u8, gs: *GameState(h, w), palette: [10][:0]const u8) !void {
     for (0..h) |i| {
         for (0..w) |j| {
-            if (i == gs.curr[0] and j == gs.curr[1]) {
-                try stdout.print("@", .{});
-            } else if (gs.arr[i][j] == 0) {
+            if (gs.arr[i][j] == 0) {
                 try stdout.print(" ", .{});
-            } else if (is_in_highlight(hl, [2]u8{ @as(u8, @truncate(i)), @as(u8, @truncate(j)) })) {
-                try stdout.print("\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[0], gs.arr[i][j] });
             } else {
                 try stdout.print("\u{001b}[{s}m{d}\u{001b}[0m", .{ palette[gs.arr[i][j]], gs.arr[i][j] });
             }
@@ -107,12 +103,23 @@ fn disp(stdout: *std.Io.Writer, comptime h: u8, comptime w: u8, gs: *GameState(h
     }
 }
 
-fn is_in_highlight(hl: Highlight, coord: [2]u8) bool {
+fn disp_highlighting(stdout: *std.Io.Writer, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highlight, palette: [10][:0]const u8, on: bool) !void {
     for (hl.keys()) |i| {
         for (0..hl.get(i).?.coords_len) |j| {
-            if (std.mem.eql(u8, &coord, &hl.get(i).?.coords[j])) return true;
+            const coord = &hl.get(i).?.coords[j];
+            const val = gs.arr[coord[0]][coord[1]];
+            const color = if (on) palette[0] else palette[val];
+            if (val == 0) {
+                try disp_char(stdout, coord, ' ');
+            } else {
+                try stdout.print("\u{001b}[{d};{d}H\u{001b}[{s}m{d}\u{001b}[0m", .{ coord[0] + 1, coord[1] + 1, color, val });
+            }
         }
-    } else return false;
+    }
+}
+
+fn disp_char(stdout: *std.Io.Writer, coord: *const [2]u8, char: u8) !void {
+    try stdout.print("\u{001b}[{d};{d}H{c}", .{ coord[0] + 1, coord[1] + 1, char });
 }
 
 fn get_moves(gpa: std.mem.Allocator, comptime h: u8, comptime w: u8, gs: *GameState(h, w), hl: *Highlight) !void {
@@ -182,15 +189,19 @@ pub fn main(init: std.process.Init) !void {
 
     var gs = game_init(io, h, w); // width and height must be known in comptime
 
+    try disp_init(stdout, h, w, &gs, palette);
+    _ = c_stdlib.system(clear_screen);
+    try stdout.flush();
+
     while (true) {
         var hl = Highlight.empty;
         defer hl.deinit(gpa);
 
         try get_moves(gpa, h, w, &gs, &hl);
-        try disp(stdout, h, w, &gs, hl, palette);
 
-        try stdout.print("Score: {d}   Percentage: {d:.2} ", .{ gs.score, percentage(h, w, gs.score) });
-        _ = c_stdlib.system(clear_screen);
+        try disp_char(stdout, &gs.curr, '@');
+        try disp_highlighting(stdout, h, w, &gs, &hl, palette, true);
+        try stdout.print("\u{001b}[{d};0HScore: {d}   Percentage: {d:.2} ", .{ h + 1, gs.score, percentage(h, w, gs.score) });
         try stdout.flush();
 
         if (hl.count() == 0) {
@@ -227,6 +238,9 @@ pub fn main(init: std.process.Init) !void {
             }
             if (valid) break;
         }
+
+        try disp_char(stdout, &gs.curr, ' ');
         update(h, w, &gs, hl, chosen_dir);
+        try disp_highlighting(stdout, h, w, &gs, &hl, palette, false);
     }
 }
