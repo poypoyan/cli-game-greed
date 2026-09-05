@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const disable_llvm = b.option(bool, "no-llvm", "Disable LLVM") orelse false;
 
     const stdlib_c = b.addTranslateC(.{
         .root_source_file = b.path("headers/stdlib.h"),
@@ -34,6 +35,10 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+
+    if (disable_llvm) {
+        exe.use_llvm = false;
+    }
 
     b.installArtifact(exe);
 }
