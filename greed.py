@@ -47,33 +47,40 @@ def init(h: int, w: int) -> GameState:
     return GameState(h, w, h * w, arr, curr)
 
 
-def disp(gs: GameState, hl: dict, palette: list, cls: str) -> None:
+def disp_init(gs: GameState, palette: list, cls: str) -> None:
     line = ''
     for i in range(gs.HEIGHT):
         for j in range(gs.WIDTH):
-            if i == gs.curr[0] and j == gs.curr[1]:
-                line += '@'
-            elif gs.arr[i][j] == 0:
+            if gs.arr[i][j] == 0:
                 line += ' '
-            elif is_in_highlight(hl, (i, j)):
-                line += f'{ansi_color(palette[0])}{gs.arr[i][j]}{ansi_color(0)}'
             else:
-                line += f'{ansi_color(palette[gs.arr[i][j]])}{gs.arr[i][j]}{ansi_color(0)}'
+                line += f'{ansi_color(palette[gs.arr[i][j]])}{gs.arr[i][j]}{ansi_color("0")}'
         line += '\n'
     os.system(cls)
-    print(f'{line}{ansi_color(0)}')
+    print(line)
 
 
-def is_in_highlight(hl: dict, coord: tuple) -> bool:
+def disp_highlighting(gs: GameState, hl: dict, palette: list, on: bool) -> None:
     for i in hl:
-        if coord in hl[i]:
-            return True
-    else:
-        return False
+        for j in hl[i]:
+            val = gs.arr[j[0]][j[1]]
+            color = palette[0] if on else palette[val]
+            if val == 0:
+                disp_char(j, ' ')
+            else:
+                print(f'{ansi_move(j[0] + 1, j[1] + 1)}{ansi_color(color)}{val}{ansi_color("0")}')
 
 
-def ansi_color(code):
+def disp_char(coord: list, char: str) -> None:
+    print(f'{ansi_move(coord[0] + 1, coord[1] + 1)}{char}')
+
+
+def ansi_color(code: str) -> str:
     return f'\u001b[{code}m'
+
+
+def ansi_move(r: int, c: int) -> str:
+    return f'\u001b[{r};{c}H'
 
 
 def get_moves(gs: GameState) -> dict:
@@ -127,11 +134,13 @@ def main() -> None:
         CLEAR_SCREEN = 'clear'
 
     gs = init(HEIGHT, WIDTH)
+    disp_init(gs, PALETTE, CLEAR_SCREEN)
 
     while True:
         hl = get_moves(gs)
-        disp(gs, hl, PALETTE, CLEAR_SCREEN)
-        print(f'Score: {gs.score}   Percentage: {percentage(gs)}', end=' ', flush=True)
+        disp_char(gs.curr, '@')
+        disp_highlighting(gs, hl, PALETTE, True)
+        print(f'{ansi_move(HEIGHT + 1, 0)}Score: {gs.score}   Percentage: {percentage(gs)}', end=' ', flush=True)
         if len(hl) == 0:
             print('   Game over! Press any key to quit.', end=' ', flush=True)
             readchar.readkey()
@@ -147,7 +156,9 @@ def main() -> None:
                 continue
             if chosen_dir in hl:
                break
+        disp_char(gs.curr, ' ')
         update(gs, hl, chosen_dir)
+        disp_highlighting(gs, hl, PALETTE, False)
     exit_game()
 
 
